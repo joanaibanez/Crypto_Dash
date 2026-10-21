@@ -38,6 +38,11 @@ jobs:
           cp index.html .nojekyll _site/
           cp data/crypto.json _site/data/
 
+      - name: Testar renderização do dashboard
+        run: |
+          pip install playwright
+          python scripts/smoke_test.py _site
+
       - uses: actions/configure-pages@v5
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
 
@@ -57,3 +62,20 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verificar site publicado
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          sleep 30
+          echo "== $PAGE_URL"
+          curl -sS -o page.html -w "HTTP %{http_code}, %{size_download} bytes\n" "$PAGE_URL"
+          grep -q "Crypto Dash" page.html && echo "index.html do dashboard: ok" || { echo "index.html servido NÃO é o do dashboard:"; head -c 600 page.html; exit 1; }
+          echo "== ${PAGE_URL}data/crypto.json"
+          curl -sS -o crypto.json -w "HTTP %{http_code}, %{size_download} bytes\n" "${PAGE_URL}data/crypto.json"
+          python3 -c "
+          import json, sys
+          d = json.load(open('crypto.json'), parse_constant=lambda c: sys.exit('JSON com ' + c))
+          print('generated_at', d['generated_at'])
+          for a in d['assets']: print(a['symbol'], len(a['dates']), a['error'])
+          "

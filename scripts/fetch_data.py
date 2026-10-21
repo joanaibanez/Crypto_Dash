@@ -7,6 +7,7 @@ GitHub Pages. Usa o yfinance, que imita um navegador (TLS + cookie/crumb); com
 urllib puro o Yahoo responde 429.
 """
 import json
+import math
 import sys
 import time
 from datetime import datetime, timezone
@@ -82,7 +83,9 @@ def plain(value):
     if hasattr(value, "timestamp"):
         return int(value.timestamp())
     if hasattr(value, "item"):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None  # NaN/Infinity viram JSON inválido no navegador
     return value
 
 
@@ -138,7 +141,7 @@ def main():
         "interval": INTERVAL,
         "assets": assets,
     }
-    OUTPUT.write_text(json.dumps(document, separators=(",", ":")), encoding="utf-8")
+    OUTPUT.write_text(json.dumps(document, separators=(",", ":"), allow_nan=False), encoding="utf-8")
     print(f"Gravado {OUTPUT}", file=sys.stderr)
     return 0
 
