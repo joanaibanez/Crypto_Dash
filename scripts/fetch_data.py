@@ -27,21 +27,63 @@ RANGE = "2y"
 INTERVAL = "1d"
 OUTPUT = Path(__file__).resolve().parent.parent / "data" / "crypto.json"
 
+yf.config.debug.hide_exceptions = False  # falhas viram exceção em vez de DataFrame vazio
 
-def fetch(symbol):
+
+def fetch(symbol, attempts=3):
     last_error = None
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
             ticker = yf.Ticker(symbol)
-            history = ticker.history(period=RANGE, interval=INTERVAL, auto_adjust=False, raise_errors=True)
+            history = ticker.history(period=RANGE, interval=INTERVAL, auto_adjust=False)
             history = history.dropna(subset=["Close"])
             if history.empty:
                 raise ValueError("série vazia")
             return ticker.history_metadata or {}, history
         except Exception as error:
             last_error = error
-            time.sleep(5 * 2 ** attempt)
+            if attempt < attempts - 1:
+                time.sleep(5 * 2 ** attempt)
     raise RuntimeError(f"{symbol}: {last_error}")
+
+
+def search_symbols(asset):
+    """Tickers alternativos: o Yahoo acrescenta um número quando o código colide (ex.: UNI7083-USD)."""
+    try:
+        quotes = yf.Search(asset["key"], max_results=15, news_count=0, lists_count=0).quotes
+    except Exception as error:
+        print(f"     busca por {asset['key']} falhou: {error}", file=sys.stderr)
+        return []
+    return [
+        q["symbol"] for q in quotes
+        if q.get("quoteType") == "CRYPTOCURRENCY"
+        and q.get("symbol", "").startswith(asset["key"])
+        and q["symbol"].endswith("-USD")
+        and q["symbol"] != asset["symbol"]
+    ]
+
+
+def fetch_asset(asset):
+    try:
+        return asset["symbol"], fetch(asset["symbol"])
+    except RuntimeError as error:
+        candidates = search_symbols(asset)
+        print(f"     {error}; candidatos na busca: {candidates or 'nenhum'}", file=sys.stderr)
+        for symbol in candidates:
+            try:
+                return symbol, fetch(symbol, attempts=1)
+            except RuntimeError:
+                continue
+        raise
+
+
+def plain(value):
+    """Converte Timestamp/numpy do metadata do yfinance em tipos aceitos pelo JSON."""
+    if hasattr(value, "timestamp"):
+        return int(value.timestamp())
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
 
 def parse(meta, history):
@@ -49,12 +91,12 @@ def parse(meta, history):
     history = history[~history.index.strftime("%Y-%m-%d").duplicated(keep="last")]
     return {
         "meta": {
-            "currency": meta.get("currency"),
-            "price": meta.get("regularMarketPrice"),
-            "time": meta.get("regularMarketTime"),
-            "high52w": meta.get("fiftyTwoWeekHigh"),
-            "low52w": meta.get("fiftyTwoWeekLow"),
-            "volume": meta.get("regularMarketVolume"),
+            "currency": plain(meta.get("currency")),
+            "price": plain(meta.get("regularMarketPrice")),
+            "time": plain(meta.get("regularMarketTime")),
+            "high52w": plain(meta.get("fiftyTwoWeekHigh")),
+            "low52w": plain(meta.get("fiftyTwoWeekLow")),
+            "volume": plain(meta.get("regularMarketVolume")),
         },
         "dates": list(history.index.strftime("%Y-%m-%d")),
         "close": [round(float(x), 6) for x in history["Close"]],
@@ -70,11 +112,13 @@ def main():
     for asset in ASSETS:
         entry = dict(asset)
         try:
-            entry.update(parse(*fetch(asset["symbol"])))
+            symbol, (meta, history) = fetch_asset(asset)
+            entry["symbol"] = symbol
+            entry.update(parse(meta, history))
             if not entry["dates"]:
                 raise RuntimeError(f"{asset['symbol']}: série vazia")
             entry["error"] = None
-            print(f"ok   {asset['symbol']:<10} {len(entry['dates'])} dias", file=sys.stderr)
+            print(f"ok   {entry['symbol']:<14} {len(entry['dates'])} dias", file=sys.stderr)
         except Exception as error:  # um ativo com falha não derruba os demais
             failures += 1
             entry.update({"meta": {}, "dates": [], "close": [], "high": [], "low": [], "volume": []})
