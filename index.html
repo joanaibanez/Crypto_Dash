@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crypto Dash</title>
+<meta name="description" content="Comparativo de investimento entre Bitcoin, Ethereum, Solana, USD1 e Tether com dados do Yahoo Finance.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --border: #e3e6eb;
+    --text: #14171c;
+    --muted: #5f6773;
+    --grid: #eceef2;
+    --accent: #2563eb;
+    --pos: #15803d;
+    --neg: #c62828;
+    --pos-rgb: 37, 99, 235;
+    --neg-rgb: 198, 40, 40;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216;
+      --surface: #171b21;
+      --border: #2a3038;
+      --text: #e8ebef;
+      --muted: #9aa3ae;
+      --grid: #232930;
+      --accent: #60a5fa;
+      --pos: #4ade80;
+      --neg: #f87171;
+      --pos-rgb: 96, 165, 250;
+      --neg-rgb: 248, 113, 113;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216;
+    --surface: #171b21;
+    --border: #2a3038;
+    --text: #e8ebef;
+    --muted: #9aa3ae;
+    --grid: #232930;
+    --accent: #60a5fa;
+    --pos: #4ade80;
+    --neg: #f87171;
+    --pos-rgb: 96, 165, 250;
+    --neg-rgb: 248, 113, 113;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 24px; letter-spacing: -0.01em; }
+  h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; font: inherit; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .icon-btn { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); padding: 6px 10px; font: inherit; cursor: pointer; }
+  label.field { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+  input, select {
+    font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px;
+  }
+  input[type="number"] { width: 110px; }
+
+  .grid { display: grid; gap: 16px; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 16px; }
+  .two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); margin-bottom: 16px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+  .panel-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .panel-head h2 { margin: 0; }
+  .chart-box { position: relative; height: 300px; }
+
+  .card { border-top: 3px solid var(--c, var(--accent)); }
+  .card .name { display: flex; gap: 8px; justify-content: space-between; color: var(--muted); font-size: 13px; }
+  .card .price { font-size: 22px; font-weight: 600; margin: 4px 0 8px; }
+  .card .chg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 12px; }
+  .card .chg span { display: block; color: var(--muted); }
+  .card .err { color: var(--neg); font-size: 12px; }
+  .badge { flex-shrink: 0; white-space: nowrap; align-self: flex-start; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--c); }
+  .corr td { text-align: center; }
+
+  .notice { padding: 16px; border-radius: 12px; border: 1px solid var(--neg); color: var(--text); background: var(--surface); }
+  footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Crypto Dash</h1>
+      <div class="sub" id="updated">Carregando dados…</div>
+    </div>
+    <div class="controls">
+      <div class="seg" id="periods" role="group" aria-label="Período"></div>
+      <button class="icon-btn" id="theme" aria-label="Alternar tema claro/escuro">Tema</button>
+    </div>
+  </header>
+
+  <div id="error"></div>
+
+  <section class="grid cards" id="cards"></section>
+
+  <section class="grid two">
+    <div class="panel">
+      <div class="panel-head"><h2>Desempenho relativo (base 100)</h2><span class="sub" id="perf-range"></span></div>
+      <div class="chart-box"><canvas id="c-perf"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Preço e volume</h2>
+        <select id="asset-select" aria-label="Ativo"></select>
+      </div>
+      <div class="chart-box"><canvas id="c-price"></canvas></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-bottom:16px">
+    <div class="panel-head"><h2>Métricas de investimento no período</h2>
+      <label class="field">Taxa livre de risco (% a.a.) <input type="number" id="rf" step="0.1" value="0"></label>
+    </div>
+    <div class="table-scroll"><table id="metrics"></table></div>
+  </section>
+
+  <section class="grid two">
+    <div class="panel">
+      <div class="panel-head"><h2>Risco × retorno</h2><span class="sub">volatilidade anualizada × retorno anualizado</span></div>
+      <div class="chart-box"><canvas id="c-scatter"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Drawdown</h2><span class="sub">queda a partir do topo do período</span></div>
+      <div class="chart-box"><canvas id="c-dd"></canvas></div>
+    </div>
+  </section>
+
+  <section class="grid two">
+    <div class="panel">
+      <div class="panel-head"><h2>Volatilidade móvel (30 dias)</h2><span class="sub">anualizada</span></div>
+      <div class="chart-box"><canvas id="c-vol"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Paridade das stablecoins</h2><span class="sub">desvio em relação a US$ 1,00</span></div>
+      <div class="chart-box"><canvas id="c-peg"></canvas></div>
+    </div>
+  </section>
+
+  <section class="grid two">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Simulador de investimento</h2>
+        <div class="controls">
+          <div class="seg" id="mode" role="group" aria-label="Modalidade">
+            <button data-mode="lump" aria-pressed="true">Aporte único</button>
+            <button data-mode="dca" aria-pressed="false">Mensal (DCA)</button>
+          </div>
+          <label class="field">US$ <input type="number" id="amount" min="1" step="100" value="1000"></label>
+        </div>
+      </div>
+      <div class="table-scroll"><table id="sim"></table></div>
+      <p class="sub" id="sim-note"></p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Correlação dos retornos diários</h2><span class="sub">Pearson, datas em comum</span></div>
+      <div class="table-scroll"><table class="corr" id="corr"></table></div>
+    </div>
+  </section>
+
+  <footer>
+    Fonte: Yahoo Finance (endpoint não oficial), atualizado automaticamente via GitHub Actions.
+    Dados podem ter atraso ou falhas. Conteúdo informativo, não é recomendação de investimento.
+  </footer>
+</div>
+
+<script>
+const PERIODS = { "1M": 30, "3M": 90, "6M": 180, "1A": 365, "2A": 730, "Máx": Infinity };
+const DAY = 864e5;
+const state = { period: "1A", asset: "BTC", amount: 1000, mode: "lump", rf: 0 };
+const charts = {};
+let DATA = null;
+let LAST_DATE = null;
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+const pct = (v, d = 2) => Number.isFinite(v) ? (v * 100).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%" : "—";
+const signPct = (v, d = 2) => Number.isFinite(v) ? `<span class="${v >= 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${pct(v, d)}</span>` : "—";
+const usd = (v, d) => Number.isFinite(v)
+  ? v.toLocaleString("pt-BR", { style: "currency", currency: "USD", minimumFractionDigits: d ?? (Math.abs(v) < 10 ? 4 : 2), maximumFractionDigits: d ?? (Math.abs(v) < 10 ? 4 : 2) })
+  : "—";
+const compact = (v) => Number.isFinite(v) ? v.toLocaleString("pt-BR", { notation: "compact", maximumFractionDigits: 1 }) : "—";
+const num = (v, d = 2) => Number.isFinite(v) ? v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }) : "—";
+const fmtDate = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y.slice(2)}`; };
+const isoMinusDays = (iso, n) => new Date(Date.parse(iso) - n * DAY).toISOString().slice(0, 10);
+
+const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+const std = (a) => { if (a.length < 2) return NaN; const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+const returns = (c) => c.slice(1).map((x, i) => x / c[i] - 1);
+
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function validAssets() { return DATA.assets.filter((a) => !a.error && a.dates.length > 1); }
+
+function windowed(asset) {
+  const days = PERIODS[state.period];
+  let i0 = 0;
+  if (Number.isFinite(days)) {
+    const cutoff = isoMinusDays(LAST_DATE, days);
+    i0 = asset.dates.findIndex((d) => d >= cutoff);
+    if (i0 < 0) i0 = asset.dates.length;
+  }
+  return {
+    dates: asset.dates.slice(i0),
+    close: asset.close.slice(i0),
+    volume: asset.volume.slice(i0),
+  };
+}
+
+function changeOver(asset, days) {
+  const n = asset.close.length;
+  if (n < 2) return NaN;
+  const target = isoMinusDays(asset.dates[n - 1], days);
+  let i = asset.dates.findIndex((d) => d >= target);
+  if (i < 0 || i >= n - 1) return NaN;
+  return asset.close[n - 1] / asset.close[i] - 1;
+}
+
+function metrics(asset, w) {
+  const c = w.close, n = c.length;
+  if (n < 2) return null;
+  const r = returns(c);
+  const days = (Date.parse(w.dates[n - 1]) - Date.parse(w.dates[0])) / DAY;
+  const total = c[n - 1] / c[0] - 1;
+  const cagr = days > 0 ? Math.pow(c[n - 1] / c[0], 365 / days) - 1 : NaN;
+  const vol = std(r) * Math.sqrt(365);
+  const rf = state.rf / 100;
+  const sharpe = vol > 0 ? (mean(r) * 365 - rf) / vol : NaN;
+  const downside = r.filter((x) => x < 0);
+  const dsd = downside.length > 1 ? Math.sqrt(downside.reduce((s, x) => s + x * x, 0) / r.length) * Math.sqrt(365) : NaN;
+  const sortino = dsd > 0 ? (mean(r) * 365 - rf) / dsd : NaN;
+  let peak = c[0], mdd = 0;
+  const dd = c.map((x) => { peak = Math.max(peak, x); const v = x / peak - 1; mdd = Math.min(mdd, v); return v; });
+  const pegDev = c.map((x) => Math.abs(x - 1));
+  return {
+    total, cagr, vol, sharpe, sortino, mdd, dd,
+    best: Math.max(...r), worst: Math.min(...r),
+    avgVolume: mean(w.volume),
+    pegMax: Math.max(...pegDev), pegAvg: mean(pegDev),
+  };
+}
+
+function rollingVol(w, win = 30) {
+  const r = returns(w.close);
+  const out = new Array(w.close.length).fill(null);
+  for (let i = win; i <= r.length; i++) out[i] = std(r.slice(i - win, i)) * Math.sqrt(365);
+  return out;
+}
+
+function unionDates(windows) {
+  const set = new Set();
+  windows.forEach((w) => w.dates.forEach((d) => set.add(d)));
+  return [...set].sort();
+}
+
+function align(labels, dates, values) {
+  const map = new Map(dates.map((d, i) => [d, values[i]]));
+  return labels.map((d) => map.has(d) ? map.get(d) : null);
+}
+
+function baseOptions(extra = {}) {
+  const text = css("--muted"), grid = css("--grid");
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: text, boxWidth: 10, boxHeight: 10, usePointStyle: true } },
+      tooltip: { itemSort: (a, b) => (b.parsed.y ?? 0) - (a.parsed.y ?? 0) },
+    },
+    scales: {
+      x: {
+        ticks: { color: text, maxTicksLimit: 7, maxRotation: 0, callback(v) { const l = this.getLabelForValue(v); return typeof l === "string" && l.includes("-") ? fmtDate(l) : l; } },
+        grid: { display: false },
+        border: { color: grid },
+      },
+      y: { ticks: { color: text }, grid: { color: grid }, border: { display: false } },
+    },
+    ...extra,
+  };
+}
+
+function lineDataset(asset, data, extra = {}) {
+  return {
+    label: asset.key, data, borderColor: asset.color, backgroundColor: asset.color,
+    borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, spanGaps: true, tension: 0, ...extra,
+  };
+}
+
+function draw(id, config) {
+  charts[id]?.destroy();
+  charts[id] = new Chart(document.getElementById(id), config);
+}
+
+function renderCards() {
+  $("#cards").innerHTML = DATA.assets.map((a) => {
+    const head = `<div class="name"><span>${esc(a.name)} · ${esc(a.symbol)}</span><span class="badge">${a.type === "stablecoin" ? "stable" : "cripto"}</span></div>`;
+    if (a.error || !a.close.length) {
+      return `<div class="panel card" style="--c:${a.color}">${head}<div class="price">—</div><div class="err">Indisponível: ${esc(a.error || "sem dados")}</div></div>`;
+    }
+    const last = a.meta.price ?? a.close[a.close.length - 1];
+    return `<div class="panel card" style="--c:${a.color}">${head}
+      <div class="price num">${usd(last)}</div>
+      <div class="chg num">
+        <div><span>24h</span>${signPct(changeOver(a, 1))}</div>
+        <div><span>7d</span>${signPct(changeOver(a, 7))}</div>
+        <div><span>30d</span>${signPct(changeOver(a, 30))}</div>
+      </div></div>`;
+  }).join("");
+}
+
+function render() {
+  const assets = validAssets();
+  const wins = assets.map((a) => windowed(a));
+  const labels = unionDates(wins);
+  const m = assets.map((a, i) => metrics(a, wins[i]));
+  $("#perf-range").textContent = labels.length ? `${fmtDate(labels[0])} – ${fmtDate(labels[labels.length - 1])}` : "";
+
+  draw("c-perf", {
+    type: "line",
+    data: { labels, datasets: assets.map((a, i) => lineDataset(a, align(labels, wins[i].dates, wins[i].close.map((x) => (x / wins[i].close[0]) * 100)))) },
+    options: baseOptions(),
+  });
+
+  renderPrice(assets, wins);
+
+  draw("c-dd", {
+    type: "line",
+    data: { labels, datasets: assets.map((a, i) => lineDataset(a, align(labels, wins[i].dates, m[i] ? m[i].dd.map((x) => x * 100) : []))) },
+    options: baseOptions({ scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, ticks: { color: css("--muted"), callback: (v) => v + "%" } } } }),
+  });
+
+  draw("c-vol", {
+    type: "line",
+    data: { labels, datasets: assets.map((a, i) => lineDataset(a, align(labels, wins[i].dates, rollingVol(wins[i]).map((x) => x === null ? null : x * 100)))) },
+    options: baseOptions({ scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, ticks: { color: css("--muted"), callback: (v) => v + "%" } } } }),
+  });
+
+  const stables = assets.map((a, i) => [a, i]).filter(([a]) => a.type === "stablecoin");
+  draw("c-peg", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        ...stables.map(([a, i]) => lineDataset(a, align(labels, wins[i].dates, wins[i].close.map((x) => (x - 1) * 100)))),
+        { label: "US$ 1,00", data: labels.map(() => 0), borderColor: css("--muted"), borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+      ],
+    },
+    options: baseOptions({ scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, ticks: { color: css("--muted"), callback: (v) => num(v, 2) + "%" } } } }),
+  });
+
+  draw("c-scatter", {
+    type: "scatter",
+    data: {
+      datasets: assets.map((a, i) => ({
+        label: a.key, data: m[i] ? [{ x: m[i].vol * 100, y: m[i].cagr * 100 }] : [],
+        backgroundColor: a.color, borderColor: a.color, pointRadius: 7, pointHoverRadius: 9,
+      })),
+    },
+    options: baseOptions({
+      interaction: { mode: "nearest", intersect: true },
+      plugins: {
+        legend: baseOptions().plugins.legend,
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: vol ${num(ctx.parsed.x, 1)}% · retorno ${num(ctx.parsed.y, 1)}% a.a.` } },
+      },
+      scales: {
+        x: { type: "linear", title: { display: true, text: "Volatilidade anualizada (%)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--grid") } },
+        y: { title: { display: true, text: "Retorno anualizado (%)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--grid") } },
+      },
+    }),
+  });
+
+  renderMetrics(assets, m);
+  renderSim(assets, wins);
+  renderCorr(assets, wins);
+}
+
+function renderPrice(assets, wins) {
+  const i = Math.max(0, assets.findIndex((a) => a.key === state.asset));
+  const a = assets[i], w = wins[i];
+  if (!a) return;
+  draw("c-price", {
+    data: {
+      labels: w.dates,
+      datasets: [
+        { ...lineDataset(a, w.close), type: "line", label: `${a.key} (US$)`, yAxisID: "y" },
+        { type: "bar", label: "Volume", data: w.volume, yAxisID: "v", backgroundColor: css("--grid"), borderWidth: 0 },
+      ],
+    },
+    options: baseOptions({
+      plugins: {
+        legend: baseOptions().plugins.legend,
+        tooltip: { callbacks: { label: (ctx) => ctx.dataset.yAxisID === "v" ? `Volume: ${compact(ctx.parsed.y)}` : `Preço: ${usd(ctx.parsed.y)}` } },
+      },
+      scales: {
+        x: baseOptions().scales.x,
+        y: { position: "left", ticks: { color: css("--muted"), callback: (v) => usd(v) }, grid: { color: css("--grid") }, border: { display: false } },
+        v: { position: "right", ticks: { color: css("--muted"), callback: (v) => compact(v) }, grid: { display: false }, border: { display: false } },
+      },
+    }),
+  });
+}
+
+function renderMetrics(assets, m) {
+  const cols = [
+    ["Retorno", (x) => signPct(x.total)],
+    ["Retorno a.a.", (x) => signPct(x.cagr)],
+    ["Volatilidade a.a.", (x) => pct(x.vol)],
+    ["Sharpe", (x) => num(x.sharpe)],
+    ["Sortino", (x) => num(x.sortino)],
+    ["Drawdown máx.", (x) => signPct(x.mdd)],
+    ["Melhor dia", (x) => signPct(x.best)],
+    ["Pior dia", (x) => signPct(x.worst)],
+    ["Volume médio", (x) => compact(x.avgVolume)],
+    ["Desvio máx. de US$ 1", (x, a) => a.type === "stablecoin" ? pct(x.pegMax, 3) : "—"],
+  ];
+  $("#metrics").innerHTML =
+    `<thead><tr><th>Ativo</th>${cols.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
+    assets.map((a, i) => `<tr><td><span class="dot" style="--c:${a.color}"></span>${esc(a.name)}</td>${
+      m[i] ? cols.map(([, f]) => `<td class="num">${f(m[i], a)}</td>`).join("") : `<td colspan="${cols.length}">dados insuficientes</td>`
+    }</tr>`).join("") + "</tbody>";
+}
+
+function simulate(w) {
+  const c = w.close, n = c.length;
+  if (n < 2) return null;
+  if (state.mode === "lump") return { invested: state.amount, value: state.amount * c[n - 1] / c[0], buys: 1 };
+  let units = 0, buys = 0, next = Date.parse(w.dates[0]);
+  for (let i = 0; i < n; i++) {
+    if (Date.parse(w.dates[i]) >= next) { units += state.amount / c[i]; buys++; next += 30 * DAY; }
+  }
+  return { invested: buys * state.amount, value: units * c[n - 1], buys };
+}
+
+function renderSim(assets, wins) {
+  const rows = assets.map((a, i) => [a, simulate(wins[i])]);
+  $("#sim").innerHTML =
+    "<thead><tr><th>Ativo</th><th>Investido</th><th>Valor final</th><th>Resultado</th><th>%</th></tr></thead><tbody>" +
+    rows.map(([a, s]) => s
+      ? `<tr><td><span class="dot" style="--c:${a.color}"></span>${esc(a.key)}</td><td class="num">${usd(s.invested, 2)}</td><td class="num">${usd(s.value, 2)}</td><td class="num"><span class="${s.value >= s.invested ? "pos" : "neg"}">${usd(s.value - s.invested, 2)}</span></td><td class="num">${signPct(s.value / s.invested - 1)}</td></tr>`
+      : `<tr><td>${esc(a.key)}</td><td colspan="4">dados insuficientes</td></tr>`).join("") + "</tbody>";
+  const buys = rows.find(([, s]) => s)?.[1]?.buys ?? 0;
+  $("#sim-note").textContent = state.mode === "lump"
+    ? `Aporte único no primeiro dia do período (${state.period}). Não inclui taxas, spread ou impostos.`
+    : `Aporte a cada 30 dias, ${buys} aportes no período (${state.period}). Não inclui taxas, spread ou impostos.`;
+}
+
+function pearson(x, y) {
+  const mx = mean(x), my = mean(y);
+  let sxy = 0, sx = 0, sy = 0;
+  for (let i = 0; i < x.length; i++) { const dx = x[i] - mx, dy = y[i] - my; sxy += dx * dy; sx += dx * dx; sy += dy * dy; }
+  return sx > 0 && sy > 0 ? sxy / Math.sqrt(sx * sy) : NaN;
+}
+
+function renderCorr(assets, wins) {
+  const maps = wins.map((w) => new Map(returns(w.close).map((r, i) => [w.dates[i + 1], r])));
+  const cell = (r) => {
+    if (!Number.isFinite(r)) return "<td>—</td>";
+    const rgb = r >= 0 ? css("--pos-rgb") : css("--neg-rgb");
+    const strong = Math.abs(r) > 0.55;
+    return `<td class="num" style="background:rgba(${rgb},${(Math.abs(r) * 0.85).toFixed(2)});${strong ? "color:#fff" : ""}">${num(r)}</td>`;
+  };
+  $("#corr").innerHTML =
+    `<thead><tr><th></th>${assets.map((a) => `<th>${esc(a.key)}</th>`).join("")}</tr></thead><tbody>` +
+    assets.map((a, i) => `<tr><th style="text-align:left"><span class="dot" style="--c:${a.color}"></span>${esc(a.key)}</th>${
+      assets.map((_, j) => {
+        if (i === j) return cell(1);
+        const common = [...maps[i].keys()].filter((d) => maps[j].has(d));
+        return common.length > 10 ? cell(pearson(common.map((d) => maps[i].get(d)), common.map((d) => maps[j].get(d)))) : "<td>—</td>";
+      }).join("")
+    }</tr>`).join("") + "</tbody>";
+}
+
+function initControls() {
+  $("#periods").innerHTML = Object.keys(PERIODS).map((p) => `<button data-p="${p}" aria-pressed="${p === state.period}">${p}</button>`).join("");
+  $("#periods").addEventListener("click", (e) => {
+    const p = e.target.closest("button")?.dataset.p;
+    if (!p) return;
+    state.period = p;
+    document.querySelectorAll("#periods button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.p === p));
+    render();
+  });
+
+  const assets = validAssets();
+  if (!assets.some((a) => a.key === state.asset) && assets[0]) state.asset = assets[0].key;
+  $("#asset-select").innerHTML = assets.map((a) => `<option value="${esc(a.key)}"${a.key === state.asset ? " selected" : ""}>${esc(a.name)}</option>`).join("");
+  $("#asset-select").addEventListener("change", (e) => { state.asset = e.target.value; render(); });
+
+  $("#mode").addEventListener("click", (e) => {
+    const mode = e.target.closest("button")?.dataset.mode;
+    if (!mode) return;
+    state.mode = mode;
+    document.querySelectorAll("#mode button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
+    render();
+  });
+  $("#amount").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (v > 0) { state.amount = v; render(); } });
+  $("#rf").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) { state.rf = v; render(); } });
+
+  $("#theme").addEventListener("click", () => {
+    const dark = document.documentElement.dataset.theme
+      ? document.documentElement.dataset.theme === "dark"
+      : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", document.documentElement.dataset.theme); } catch {}
+    render();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
+}
+
+async function main() {
+  try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+  try {
+    const res = await fetch("data/crypto.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    DATA = await res.json();
+  } catch (err) {
+    $("#updated").textContent = "Sem dados";
+    $("#error").innerHTML = `<div class="notice">Não foi possível carregar <code>data/crypto.json</code> (${esc(err.message)}).
+      Rode <code>python scripts/fetch_data.py</code> e sirva a pasta com <code>python -m http.server</code>, ou aguarde o GitHub Actions publicar.</div>`;
+    return;
+  }
+  if (typeof Chart === "undefined") {
+    $("#error").innerHTML = `<div class="notice">Falha ao carregar a biblioteca de gráficos (Chart.js).</div>`;
+    return;
+  }
+  LAST_DATE = validAssets().map((a) => a.dates[a.dates.length - 1]).sort().pop();
+  const when = new Date(DATA.generated_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  $("#updated").textContent = `Atualizado em ${when} · ${DATA.source} · cotações em USD`;
+  initControls();
+  renderCards();
+  render();
+}
+
+main();
+</script>
+</body>
+</html>
