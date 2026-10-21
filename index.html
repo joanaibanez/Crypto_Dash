@@ -707,7 +707,8 @@ function renderAnalysis() {
     const steadiest = by(stables, (x) => x.pegMax90, -1);
     goals.push(["Preservar valor em dólar",
       `As stablecoins são as únicas da lista feitas para não oscilar. Nos últimos 90 dias, ${stables.map((a) => `${esc(a.key)} se afastou no máximo ${pct(an.get(a.key).pegMax90, 2)}`).join(" e ")} de US$ 1,00` +
-      (steadiest && stables.length > 1 ? `; ${esc(steadiest.key)} foi a mais estável.` : ".") +
+      (stables.length > 1 ? (Math.max(...stables.map((a) => an.get(a.key).pegMax90)) - an.get(steadiest.key).pegMax90 < 0.0005
+        ? "; na prática, ficaram igualmente estáveis." : `; ${esc(steadiest.key)} foi a mais estável.`) : ".") +
       " Elas não rendem nada sozinhas; o risco é do emissor (reservas, resgates, regulação), não de preço."]);
   }
   if (cryptos.length) {
@@ -717,9 +718,11 @@ function renderAnalysis() {
     const up = cryptos.filter((a) => an.get(a.key).trend === "alta").map((a) => a.key);
     const down = cryptos.filter((a) => an.get(a.key).trend === "baixa").map((a) => a.key);
     goals.push(["Crescimento aceitando oscilação",
-      `No último ano, ${esc(bestSharpe.name)} teve o melhor retorno por unidade de risco (Sharpe ${num(an.get(bestSharpe.key).sharpe)})` +
-      (shallow === bestSharpe ? ` e também a menor queda máxima (${pct(an.get(shallow.key).mdd, 1)}).`
-        : shallow ? ` e ${esc(shallow.name)} a menor queda máxima (${pct(an.get(shallow.key).mdd, 1)}).` : ".") +
+      (an.get(bestSharpe.key).sharpe > 0
+        ? `No último ano, ${esc(bestSharpe.name)} teve o melhor retorno por unidade de risco (Sharpe ${num(an.get(bestSharpe.key).sharpe)})`
+        : `No último ano, nenhuma delas compensou o risco: todas têm Sharpe negativo. A menos ruim foi ${esc(bestSharpe.name)} (Sharpe ${num(an.get(bestSharpe.key).sharpe)})`) +
+      (shallow === bestSharpe ? `, e também teve a menor queda máxima (${pct(an.get(shallow.key).mdd, 1)}).`
+        : shallow ? `, e ${esc(shallow.name)} teve a menor queda máxima (${pct(an.get(shallow.key).mdd, 1)}).` : ".") +
       ` Tendência hoje: ${up.length ? `alta em ${up.join(", ")}` : "nenhuma em alta"}${down.length ? `; baixa em ${down.join(", ")}` : ""}.`]);
     goals.push(["Maior risco, maior amplitude",
       `${esc(wild.name)} é o mais volátil (${pct(an.get(wild.key).vol1y, 0)} ao ano). Na pior janela de 30 dias do histórico caiu ${pct(-an.get(wild.key).worst30.r, 1)}; na melhor, subiu ${pct(an.get(wild.key).best30.r, 1)}.`]);
