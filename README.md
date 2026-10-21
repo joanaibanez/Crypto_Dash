@@ -6,7 +6,7 @@ Dashboard estático que compara Bitcoin, Ethereum, Solana, USD1 e Tether com dad
 
 O Yahoo Finance não tem API oficial e o endpoint usado (`/v8/finance/chart`) **bloqueia chamadas feitas direto do navegador (CORS)**. Por isso:
 
-1. `scripts/fetch_data.py` (Python, só biblioteca padrão) baixa 2 anos de candles diários e grava `data/crypto.json`.
+1. `scripts/fetch_data.py` (Python + `yfinance`) baixa 2 anos de candles diários e grava `data/crypto.json`.
 2. O workflow `.github/workflows/deploy.yml` roda esse script **a cada hora**, a cada push na `main` e manualmente, e publica `index.html` + `data/crypto.json` no GitHub Pages.
 3. O `index.html` lê o JSON e calcula tudo no navegador (Chart.js).
 
@@ -31,6 +31,7 @@ Se um ativo falhar no Yahoo, ele aparece como "Indisponível" e os demais seguem
 ## Rodar localmente
 
 ```bash
+pip install -r requirements.txt
 python scripts/fetch_data.py
 python -m http.server 8000
 # abra http://localhost:8000

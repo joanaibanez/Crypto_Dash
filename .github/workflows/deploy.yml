@@ -25,6 +25,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
 
       - name: Baixar dados do Yahoo Finance
         run: python scripts/fetch_data.py

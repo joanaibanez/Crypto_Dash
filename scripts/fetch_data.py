@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Baixa o histórico diário das criptomoedas no Yahoo Finance e grava data/crypto.json.
 
-Usa apenas a biblioteca padrão. O endpoint v8/chart do Yahoo não é oficial e
-não aceita chamadas do navegador (CORS), por isso os dados são coletados aqui,
-no GitHub Actions, e servidos como arquivo estático pelo GitHub Pages.
+O Yahoo não tem API oficial e bloqueia chamadas do navegador (CORS), por isso os
+dados são coletados aqui, no GitHub Actions, e servidos como arquivo estático pelo
+GitHub Pages. Usa o yfinance, que imita um navegador (TLS + cookie/crumb); com
+urllib puro o Yahoo responde 429.
 """
 import json
 import sys
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+import yfinance as yf
 
 # Para trocar/adicionar ativos, edite somente esta lista.
 ASSETS = [
@@ -25,67 +25,28 @@ ASSETS = [
 
 RANGE = "2y"
 INTERVAL = "1d"
-HOSTS = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
-USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-)
 OUTPUT = Path(__file__).resolve().parent.parent / "data" / "crypto.json"
 
 
-def fetch_chart(symbol):
-    params = urllib.parse.urlencode(
-        {"range": RANGE, "interval": INTERVAL, "includePrePost": "false", "events": "history"}
-    )
+def fetch(symbol):
     last_error = None
     for attempt in range(3):
-        for host in HOSTS:
-            url = f"https://{host}/v8/finance/chart/{urllib.parse.quote(symbol)}?{params}"
-            request = urllib.request.Request(
-                url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
-            )
-            try:
-                with urllib.request.urlopen(request, timeout=20) as response:
-                    payload = json.load(response)
-                chart = payload.get("chart") or {}
-                if chart.get("error"):
-                    raise ValueError(chart["error"].get("description") or str(chart["error"]))
-                result = (chart.get("result") or [None])[0]
-                if not result:
-                    raise ValueError("resposta sem dados")
-                return result
-            except (urllib.error.URLError, ValueError, TimeoutError) as error:
-                last_error = error
-        time.sleep(2 ** attempt)
+        try:
+            ticker = yf.Ticker(symbol)
+            history = ticker.history(period=RANGE, interval=INTERVAL, auto_adjust=False, raise_errors=True)
+            history = history.dropna(subset=["Close"])
+            if history.empty:
+                raise ValueError("série vazia")
+            return ticker.history_metadata or {}, history
+        except Exception as error:
+            last_error = error
+            time.sleep(5 * 2 ** attempt)
     raise RuntimeError(f"{symbol}: {last_error}")
 
 
-def parse_chart(result):
-    meta = result.get("meta") or {}
-    timestamps = result.get("timestamp") or []
-    quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
-    offset = meta.get("gmtoffset") or 0
-
-    def column(name):
-        values = quote.get(name) or []
-        return values + [None] * (len(timestamps) - len(values))
-
-    closes, highs, lows, volumes = column("close"), column("high"), column("low"), column("volume")
-
-    # Yahoo às vezes repete o candle do dia corrente; o dicionário mantém o último.
-    rows = {}
-    for i, ts in enumerate(timestamps):
-        if closes[i] is None:
-            continue
-        day = datetime.fromtimestamp(ts + offset, tz=timezone.utc).date().isoformat()
-        rows[day] = (
-            closes[i],
-            highs[i] if highs[i] is not None else closes[i],
-            lows[i] if lows[i] is not None else closes[i],
-            volumes[i] or 0,
-        )
-
-    dates = sorted(rows)
+def parse(meta, history):
+    # Yahoo às vezes repete o candle do dia corrente; mantém o último por data.
+    history = history[~history.index.strftime("%Y-%m-%d").duplicated(keep="last")]
     return {
         "meta": {
             "currency": meta.get("currency"),
@@ -95,11 +56,11 @@ def parse_chart(result):
             "low52w": meta.get("fiftyTwoWeekLow"),
             "volume": meta.get("regularMarketVolume"),
         },
-        "dates": dates,
-        "close": [round(rows[d][0], 6) for d in dates],
-        "high": [round(rows[d][1], 6) for d in dates],
-        "low": [round(rows[d][2], 6) for d in dates],
-        "volume": [int(rows[d][3]) for d in dates],
+        "dates": list(history.index.strftime("%Y-%m-%d")),
+        "close": [round(float(x), 6) for x in history["Close"]],
+        "high": [round(float(x), 6) for x in history["High"].fillna(history["Close"])],
+        "low": [round(float(x), 6) for x in history["Low"].fillna(history["Close"])],
+        "volume": [int(x) for x in history["Volume"].fillna(0)],
     }
 
 
@@ -109,7 +70,7 @@ def main():
     for asset in ASSETS:
         entry = dict(asset)
         try:
-            entry.update(parse_chart(fetch_chart(asset["symbol"])))
+            entry.update(parse(*fetch(asset["symbol"])))
             if not entry["dates"]:
                 raise RuntimeError(f"{asset['symbol']}: série vazia")
             entry["error"] = None
@@ -128,7 +89,7 @@ def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     document = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "source": "Yahoo Finance (v8/finance/chart)",
+        "source": "Yahoo Finance",
         "range": RANGE,
         "interval": INTERVAL,
         "assets": assets,
