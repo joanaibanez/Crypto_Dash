@@ -248,6 +248,18 @@
     </section>
 
     <section class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <h2>Projeção estatística ARIMA: próximos 30 dias</h2>
+        <select id="arima-asset" aria-label="Ativo da projeção"></select>
+      </div>
+      <div class="chart-box"><canvas id="c-arima"></canvas></div>
+      <p class="sub" id="arima-note"></p>
+      <div class="table-scroll"><table id="an-arima"></table></div>
+      <p class="sub">Modelo ARIMA(p,1,q) ajustado ao log do preço dos últimos 2 anos (statsmodels), com a ordem escolhida por AIC.
+        <b>Erro vs. ingênuo</b>: erro médio da previsão de 30 dias em 8 momentos passados dividido pelo erro de simplesmente repetir o último preço. Abaixo de 1 o modelo foi melhor; 1 ou mais, não acrescentou nada.</p>
+    </section>
+
+    <section class="panel" style="margin-bottom:16px">
       <div class="panel-head"><h2>Contexto de mercado</h2><span class="sub" id="ctx-date"></span></div>
       <div id="ctx-warn"></div>
       <div class="ctx" id="ctx"></div>
@@ -744,12 +756,82 @@ function renderAnalysis() {
       <td class="num">${signPct(x.best30.r, 1)}</td><td class="num">${x.best30.end ? fmtDate(x.best30.end) : "—"}</td><td class="num">${usd(amount * (1 + x.best30.r), 2)}</td></tr>`; }).join("") +
     "</tbody>";
 
+  renderArima(assets);
+
   const age = Math.floor((Date.now() - Date.parse(CONTEXT.date)) / DAY);
   $("#ctx-date").textContent = `escrito em ${fmtDate(CONTEXT.date)}`;
   $("#ctx-warn").innerHTML = age > CONTEXT_MAX_AGE
     ? `<div class="warn">Este contexto tem ${age} dias e provavelmente está desatualizado. Os números das tabelas acima continuam atuais.</div>` : "";
   $("#ctx").innerHTML = CONTEXT.items.map((it) => `<div><h3>${esc(it.title)}</h3><p>${esc(it.text)}</p>
     <div class="src">Fontes: ${it.sources.map(([label, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>`).join(" · ")}</div></div>`).join("");
+}
+
+function hexAlpha(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+function arimaVerdict(bt) {
+  if (!bt || !Number.isFinite(bt.ratio)) return "—";
+  if (bt.ratio < 0.9) return `<span class="pos">${num(bt.ratio)} (melhor)</span>`;
+  if (bt.ratio <= 1.02) return `${num(bt.ratio)} (igual)`;
+  return `<span class="neg">${num(bt.ratio)} (pior)</span>`;
+}
+
+function renderArima(assets) {
+  const withFc = assets.filter((a) => a.forecast);
+  const sel = $("#arima-asset");
+  if (!withFc.length) {
+    $("#an-arima").innerHTML = "<tbody><tr><td>Projeção indisponível nesta atualização.</td></tr></tbody>";
+    sel.hidden = true;
+    return;
+  }
+  if (!sel.options.length) {
+    sel.innerHTML = withFc.map((a) => `<option value="${esc(a.key)}">${esc(a.name)}</option>`).join("");
+    sel.addEventListener("change", () => renderArima(validAssets()));
+  }
+  const a = withFc.find((x) => x.key === sel.value) || withFc[0];
+  const fc = a.forecast, hist = lastDays(a, 180);
+  const labels = [...hist.dates, ...fc.dates];
+  const pad = (arr) => [...hist.dates.slice(0, -1).map(() => null), hist.close[hist.close.length - 1], ...arr];
+  const band = (lo, hi, alpha, label) => [
+    { label: `${label} inf.`, data: pad(lo), borderWidth: 0, pointRadius: 0, fill: false },
+    { label, data: pad(hi), borderWidth: 0, pointRadius: 0, fill: "-1", backgroundColor: hexAlpha(a.color, alpha) },
+  ];
+  draw("c-arima", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        lineDataset(a, [...hist.close, ...fc.dates.map(() => null)], { label: `${a.key} (histórico)` }),
+        lineDataset(a, pad(fc.mean), { label: "Projeção central", borderDash: [5, 4] }),
+        ...band(fc.lo95, fc.hi95, 0.12, "Faixa 95%"),
+        ...band(fc.lo80, fc.hi80, 0.22, "Faixa 80%"),
+      ],
+    },
+    options: baseOptions({
+      plugins: {
+        legend: { labels: { ...baseOptions().plugins.legend.labels, filter: (item) => !item.text.endsWith(" inf.") } },
+        tooltip: { filter: (item) => !item.dataset.label.endsWith(" inf."), callbacks: { label: (ctx) => `${ctx.dataset.label}: ${usd(ctx.parsed.y)}` } },
+      },
+      scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, ticks: { color: css("--muted"), callback: (v) => usd(v) } } },
+    }),
+  });
+
+  const last = a.close[a.close.length - 1], end = fc.mean.length - 1;
+  const rw = fc.order[0] === 0 && fc.order[2] === 0;
+  $("#arima-note").innerHTML = rw
+    ? `Para ${esc(a.name)} o melhor modelo foi ARIMA(0,1,0), um passeio aleatório: a projeção central é o preço de hoje, e o que o modelo informa é a <b>largura da incerteza</b>. Com 95% de confiança estatística, em 30 dias o preço estaria entre ${usd(fc.lo95[end])} e ${usd(fc.hi95[end])} (${signPct(fc.lo95[end] / last - 1, 0)} a ${signPct(fc.hi95[end] / last - 1, 0)}).`
+    : `Para ${esc(a.name)} o modelo escolhido foi ARIMA(${fc.order.join(",")}). Projeção central em 30 dias: ${usd(fc.mean[end])}; faixa de 95%: ${usd(fc.lo95[end])} a ${usd(fc.hi95[end])}.`;
+
+  $("#an-arima").innerHTML =
+    "<thead><tr><th>Ativo</th><th>Modelo</th><th>Preço hoje</th><th>Central em 30d</th><th>Faixa 80%</th><th>Faixa 95%</th><th>Erro vs. ingênuo</th><th>Direção certa</th></tr></thead><tbody>" +
+    withFc.map((x) => { const f = x.forecast, b = f.backtest, e = f.mean.length - 1;
+      return `<tr><td><span class="dot" style="--c:${x.color}"></span>${esc(x.name)}</td><td>ARIMA(${f.order.join(",")})</td>
+        <td class="num">${usd(x.close[x.close.length - 1])}</td><td class="num">${usd(f.mean[e])}</td>
+        <td class="num">${usd(f.lo80[e])} – ${usd(f.hi80[e])}</td><td class="num">${usd(f.lo95[e])} – ${usd(f.hi95[e])}</td>
+        <td class="num">${arimaVerdict(b)}</td><td class="num">${b.direction_calls ? `${b.direction_hits} de ${b.direction_calls}` : "não aposta"}</td></tr>`; }).join("") +
+    "</tbody>";
 }
 
 function showTab(tab) {

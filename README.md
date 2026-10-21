@@ -26,6 +26,7 @@ Aba **Análise** (`#analise`):
 - Leitura técnica: tendência (preço × médias de 50/200 dias), momentum, regime de volatilidade, distância do topo, Sharpe e queda máxima em 1 ano
 - Paridade das stablecoins e cenários de estresse (pior/melhor janela de 30 dias aplicada a um valor hipotético)
 - Leitura por objetivo gerada a partir dos números atuais
+- Projeção ARIMA de 30 dias (`statsmodels`, calculada no CI) com faixas de 80%/95% e backtest contra a previsão ingênua (repetir o último preço). Para preço de cripto o ARIMA costuma escolher um passeio aleatório; a página mostra isso em vez de esconder
 - Contexto de mercado escrito à mão, datado e com fontes (constante `CONTEXT` no `index.html`). A página avisa quando ele passa de 14 dias; atualize o texto e a data para renová-lo.
 
 A aba descreve o comportamento passado; não prevê preço nem recomenda compra.

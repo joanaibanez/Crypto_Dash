@@ -55,9 +55,12 @@ def main():
         page.wait_for_timeout(300)
         if not page.is_visible("#tab-analise"):
             problems.append("aba Análise não abriu")
-        for table in ("#an-tech", "#an-peg", "#an-stress"):
+        for table in ("#an-tech", "#an-peg", "#an-stress", "#an-arima"):
             if page.locator(f"{table} tbody tr").count() == 0:
                 problems.append(f"tabela {table} vazia")
+        for row in page.locator("#an-arima tbody tr").all_inner_texts():
+            print("arima:", " | ".join(row.split("\t")))
+        print("nota arima:", page.inner_text("#arima-note"))
         for goal in page.locator("#an-goals > div").all_inner_texts():
             print("objetivo:", goal.replace("\n", ": "))
         browser.close()
