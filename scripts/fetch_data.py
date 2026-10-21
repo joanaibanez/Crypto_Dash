@@ -24,6 +24,7 @@ ASSETS = [
     {"key": "ETH", "name": "Ethereum", "symbol": "ETH-USD", "type": "crypto", "color": "#627EEA"},
     {"key": "SOL", "name": "Solana", "symbol": "SOL-USD", "type": "crypto", "color": "#9945FF"},
     {"key": "USDT", "name": "Tether", "symbol": "USDT-USD", "type": "stablecoin", "color": "#26A17B"},
+    {"key": "USDC", "name": "USD Coin", "symbol": "USDC-USD", "type": "stablecoin", "color": "#E5484D"},
 ]
 
 RANGE = "2y"

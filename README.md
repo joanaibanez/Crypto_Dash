@@ -1,6 +1,6 @@
 # Crypto Dash
 
-Dashboard estático que compara Bitcoin, Ethereum, Solana e Tether com dados diários do Yahoo Finance, publicado no GitHub Pages.
+Dashboard estático que compara Bitcoin, Ethereum, Solana, Tether e USD Coin com dados diários do Yahoo Finance, publicado no GitHub Pages.
 
 ## Como funciona
 
