@@ -36,6 +36,7 @@ HORIZON = 30
 ORDERS = [(p, 1, q) for p in range(3) for q in range(3)]
 BACKTEST_FOLDS = 8
 TRAIN_DAYS = 730
+SCALE = 100
 
 yf.config.debug.hide_exceptions = False  # falhas viram exceção em vez de DataFrame vazio
 
@@ -99,15 +100,22 @@ def backtest(y, order):
     for k in range(BACKTEST_FOLDS, 0, -1):
         origin = len(y) - HORIZON * k
         train, actual = y[:origin], y[origin + HORIZON - 1]
-        pred = fit_arima(train, order).forecast(HORIZON)[-1]
+        try:
+            pred = float(fit_arima(train, order).forecast(HORIZON)[-1])
+        except Exception:
+            continue  # ajuste instável nesta origem: descarta só ela
+        if not math.isfinite(pred):
+            continue
         model_err.append(abs(pred - actual))
         naive_err.append(abs(train[-1] - actual))
-        if abs(pred - train[-1]) > 1e-4:  # o modelo apontou uma direção
+        if abs(pred - train[-1]) > 1e-2:  # o modelo apontou uma direção (y em % → 0,01 p.p.)
             calls += 1
             hits += (pred > train[-1]) == (actual > train[-1])
-    mae_model, mae_naive = float(np.mean(model_err)), float(np.mean(naive_err))
+    if not model_err:
+        return None
+    mae_model, mae_naive = float(np.mean(model_err)) / SCALE, float(np.mean(naive_err)) / SCALE
     return {
-        "folds": BACKTEST_FOLDS,
+        "folds": len(model_err),
         "mae_model": mae_model,
         "mae_naive": mae_naive,
         "ratio": mae_model / mae_naive if mae_naive > 0 else None,
@@ -117,16 +125,26 @@ def backtest(y, order):
 
 
 def forecast(dates, close):
-    y = np.log(np.asarray(close[-TRAIN_DAYS:], dtype=float))
+    # log do preço em pontos percentuais: em stablecoins o log puro varia ~1e-4 e a otimização quebra
+    y = SCALE * np.log(np.asarray(close[-TRAIN_DAYS:], dtype=float))
     if len(y) < HORIZON * (BACKTEST_FOLDS + 2):
         raise ValueError(f"histórico curto demais ({len(y)} dias)")
-    fits = [(fit_arima(y, order), order) for order in ORDERS]
+    fits = []
+    for order in ORDERS:
+        try:
+            result = fit_arima(y, order)
+        except Exception:
+            continue  # uma ordem instável não invalida as outras
+        if math.isfinite(result.aic):
+            fits.append((result, order))
+    if not fits:
+        raise ValueError("nenhuma ordem ARIMA convergiu")
     result, order = min(fits, key=lambda f: f[0].aic)
     fc = result.get_forecast(HORIZON)
     mean, ci80, ci95 = fc.predicted_mean, fc.conf_int(alpha=0.2), fc.conf_int(alpha=0.05)
     start = date.fromisoformat(dates[-1])
-    as_price = lambda values: [round(float(math.exp(v)), 6) for v in values]
-    return {
+    as_price = lambda values: [round(float(math.exp(v / SCALE)), 6) for v in values]
+    out = {
         "order": list(order),
         "aic": round(float(result.aic), 2),
         "train_days": len(y),
@@ -136,6 +154,10 @@ def forecast(dates, close):
         "lo95": as_price(ci95[:, 0]), "hi95": as_price(ci95[:, 1]),
         "backtest": backtest(y, order),
     }
+    series = [out[k] for k in ("mean", "lo80", "hi80", "lo95", "hi95")]
+    if not all(math.isfinite(v) for values in series for v in values):
+        raise ValueError("projeção com valores não finitos")
+    return out
 
 
 def plain(value):
@@ -184,8 +206,8 @@ def main():
             print(f"ok   {entry['symbol']:<14} {len(entry['dates'])} dias", file=sys.stderr)
             try:  # a projeção é opcional: se falhar, os dados seguem publicados
                 entry["forecast"] = forecast(entry["dates"], entry["close"])
-                bt = entry["forecast"]["backtest"]
-                print(f"     ARIMA{tuple(entry['forecast']['order'])} erro/ingênuo={bt['ratio']:.2f}", file=sys.stderr)
+                ratio = (entry["forecast"]["backtest"] or {}).get("ratio")
+                print(f"     ARIMA{tuple(entry['forecast']['order'])} erro/ingênuo={ratio if ratio is None else round(ratio, 2)}", file=sys.stderr)
             except Exception as error:
                 entry["forecast"] = None
                 print(f"     ARIMA falhou: {error}", file=sys.stderr)

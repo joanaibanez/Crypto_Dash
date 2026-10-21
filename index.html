@@ -824,7 +824,10 @@ function renderArima(assets) {
   const rw = fc.order[0] === 0 && fc.order[2] === 0;
   $("#arima-note").innerHTML = rw
     ? `Para ${esc(a.name)} o melhor modelo foi ARIMA(0,1,0), um passeio aleatório: a projeção central é o preço de hoje, e o que o modelo informa é a <b>largura da incerteza</b>. Com 95% de confiança estatística, em 30 dias o preço estaria entre ${usd(fc.lo95[end])} e ${usd(fc.hi95[end])} (${signPct(fc.lo95[end] / last - 1, 0)} a ${signPct(fc.hi95[end] / last - 1, 0)}).`
-    : `Para ${esc(a.name)} o modelo escolhido foi ARIMA(${fc.order.join(",")}). Projeção central em 30 dias: ${usd(fc.mean[end])}; faixa de 95%: ${usd(fc.lo95[end])} a ${usd(fc.hi95[end])}.`;
+    : `Para ${esc(a.name)} o modelo escolhido foi ARIMA(${fc.order.join(",")}). Projeção central em 30 dias: ${usd(fc.mean[end])}; faixa de 95%: ${usd(fc.lo95[end])} a ${usd(fc.hi95[end])}.` +
+      (fc.backtest && fc.backtest.ratio < 0.9
+        ? ` No backtest ele errou menos que repetir o último preço (razão ${num(fc.backtest.ratio)}).`
+        : ` Porém, no backtest ele <b>não errou menos</b> que simplesmente repetir o último preço: a diferença entre a projeção central e o preço de hoje não deve ser lida como tendência.`);
 
   $("#an-arima").innerHTML =
     "<thead><tr><th>Ativo</th><th>Modelo</th><th>Preço hoje</th><th>Central em 30d</th><th>Faixa 80%</th><th>Faixa 95%</th><th>Erro vs. ingênuo</th><th>Direção certa</th></tr></thead><tbody>" +
@@ -832,7 +835,7 @@ function renderArima(assets) {
       return `<tr><td><span class="dot" style="--c:${x.color}"></span>${esc(x.name)}</td><td>ARIMA(${f.order.join(",")})</td>
         <td class="num">${usd(x.close[x.close.length - 1])}</td><td class="num">${usd(f.mean[e])}</td>
         <td class="num">${usd(f.lo80[e])} – ${usd(f.hi80[e])}</td><td class="num">${usd(f.lo95[e])} – ${usd(f.hi95[e])}</td>
-        <td class="num">${arimaVerdict(b)}</td><td class="num">${b.direction_calls ? `${b.direction_hits} de ${b.direction_calls}` : "não aposta"}</td></tr>`; }).join("") +
+        <td class="num">${arimaVerdict(b)}</td><td class="num">${!b ? "—" : b.direction_calls ? `${b.direction_hits} de ${b.direction_calls}` : "não aposta"}</td></tr>`; }).join("") +
     "</tbody>";
 }
 
