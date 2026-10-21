@@ -23,7 +23,6 @@ ASSETS = [
     {"key": "BTC", "name": "Bitcoin", "symbol": "BTC-USD", "type": "crypto", "color": "#F7931A"},
     {"key": "ETH", "name": "Ethereum", "symbol": "ETH-USD", "type": "crypto", "color": "#627EEA"},
     {"key": "SOL", "name": "Solana", "symbol": "SOL-USD", "type": "crypto", "color": "#9945FF"},
-    {"key": "USD1", "name": "USD1 (World Liberty)", "symbol": "USD136148-USD", "type": "stablecoin", "color": "#E5484D"},
     {"key": "USDT", "name": "Tether", "symbol": "USDT-USD", "type": "stablecoin", "color": "#26A17B"},
 ]
 

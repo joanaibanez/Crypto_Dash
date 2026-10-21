@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Crypto Dash</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 13l4-5 3 3 5-7' fill='none' stroke='%23F7931A' stroke-width='2'/%3E%3C/svg%3E">
-<meta name="description" content="Comparativo de investimento entre Bitcoin, Ethereum, Solana, USD1 e Tether com dados do Yahoo Finance.">
+<meta name="description" content="Comparativo de investimento entre Bitcoin, Ethereum, Solana e Tether com dados do Yahoo Finance.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
@@ -620,11 +620,10 @@ const CONTEXT = {
     },
     {
       title: "Stablecoins e regulação",
-      text: "Nos EUA, o GENIUS Act está em regulamentação, com regras entrando em vigor a partir de janeiro de 2027. O USDT, emitido fora dos EUA, ainda não está em conformidade e tem prazo até julho de 2028; a Tether lançou o USAT (jan/2026) como versão regulada no país. O USD1, da World Liberty Financial (empresa ligada à família Trump), perdeu cerca de US$ 400 milhões de capitalização entre 6 e 19/10 com resgates, mas manteve a paridade entre US$ 0,998 e 1,000; as reservas declaradas são de ~US$ 4 bi em caixa e títulos curtos do Tesouro.",
+      text: "Nos EUA, o GENIUS Act está em regulamentação, com regras entrando em vigor a partir de janeiro de 2027. O USDT, emitido fora dos EUA, ainda não está em conformidade e tem prazo até julho de 2028; a Tether lançou o USAT (jan/2026) como versão regulada no país.",
       sources: [
         ["CoinDesk, 17/07/2026", "https://www.coindesk.com/news-analysis/2026/07/17/tether-s-usdt-hits-2-year-countdown-threatening-its-position-on-u-s-crypto-platforms"],
         ["CoinDesk, 27/01/2026", "https://www.coindesk.com/business/2026/01/27/tether-debuts-federally-regulated-usat-stablecoin-via-anchorage-digital"],
-        ["Cointelegraph, out/2026", "https://cointelegraph.com/news/world-liberty-usd1-stablecoin-market-cap-drops-400-million"],
       ],
     },
   ],
@@ -718,10 +717,11 @@ function renderAnalysis() {
   if (stables.length) {
     const steadiest = by(stables, (x) => x.pegMax90, -1);
     goals.push(["Preservar valor em dólar",
-      `As stablecoins são as únicas da lista feitas para não oscilar. Nos últimos 90 dias, ${stables.map((a) => `${esc(a.key)} se afastou no máximo ${pct(an.get(a.key).pegMax90, 2)}`).join(" e ")} de US$ 1,00` +
+      (stables.length === 1 ? `${esc(stables[0].name)} é a única da lista feita para não oscilar.` : "As stablecoins são as únicas da lista feitas para não oscilar.") +
+      ` Nos últimos 90 dias, ${stables.map((a) => `${esc(a.key)} se afastou no máximo ${pct(an.get(a.key).pegMax90, 2)}`).join(" e ")} de US$ 1,00` +
       (stables.length > 1 ? (Math.max(...stables.map((a) => an.get(a.key).pegMax90)) - an.get(steadiest.key).pegMax90 < 0.0005
         ? "; na prática, ficaram igualmente estáveis." : `; ${esc(steadiest.key)} foi a mais estável.`) : ".") +
-      " Elas não rendem nada sozinhas; o risco é do emissor (reservas, resgates, regulação), não de preço."]);
+      (stables.length === 1 ? " Ela não rende nada sozinha" : " Elas não rendem nada sozinhas") + "; o risco é do emissor (reservas, resgates, regulação), não de preço."]);
   }
   if (cryptos.length) {
     const bestSharpe = by(cryptos, (x) => x.sharpe);
