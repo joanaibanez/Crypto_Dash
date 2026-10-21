@@ -50,6 +50,16 @@ def main():
         if rows == 0:
             problems.append("tabela de métricas vazia")
         print("atualizado:", page.inner_text("#updated"))
+
+        page.click('.tabs button[data-tab="analise"]')
+        page.wait_for_timeout(300)
+        if not page.is_visible("#tab-analise"):
+            problems.append("aba Análise não abriu")
+        for table in ("#an-tech", "#an-peg", "#an-stress"):
+            if page.locator(f"{table} tbody tr").count() == 0:
+                problems.append(f"tabela {table} vazia")
+        for goal in page.locator("#an-goals > div").all_inner_texts():
+            print("objetivo:", goal.replace("\n", ": "))
         browser.close()
     server.shutdown()
 

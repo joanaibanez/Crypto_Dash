@@ -106,6 +106,19 @@
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--c); }
   .corr td { text-align: center; }
 
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tabs button { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+  .goals { display: grid; gap: 12px; }
+  .goals h3 { margin: 0 0 2px; font-size: 14px; }
+  .goals p, .ctx p { margin: 0; }
+  .ctx { display: grid; gap: 14px; }
+  .ctx h3 { margin: 0 0 4px; font-size: 14px; }
+  .ctx .src { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .ctx a { color: var(--accent); }
+  .warn { border-left: 3px solid var(--neg); padding: 8px 12px; margin-bottom: 12px; background: var(--bg); border-radius: 4px; }
+  .lead { margin: 0 0 16px; }
   .notice { padding: 16px; border-radius: 12px; border: 1px solid var(--neg); color: var(--text); background: var(--surface); }
   footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
 </style>
@@ -123,8 +136,14 @@
     </div>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="painel" aria-selected="true">Painel</button>
+    <button role="tab" data-tab="analise" aria-selected="false">Análise</button>
+  </nav>
+
   <div id="error"></div>
 
+  <div id="tab-painel">
   <section class="grid cards" id="cards"></section>
 
   <section class="grid two">
@@ -190,6 +209,50 @@
       <div class="table-scroll"><table class="corr" id="corr"></table></div>
     </div>
   </section>
+
+  </div>
+
+  <div id="tab-analise" hidden>
+    <section class="panel lead">
+      <strong>Como ler esta aba.</strong> Os números abaixo descrevem o comportamento <em>passado</em> de cada ativo, recalculados a cada atualização dos dados.
+      Eles mostram tendência, risco e o que já aconteceu em momentos ruins e bons, mas não preveem preço futuro e não indicam qual moeda comprar.
+      A decisão depende do seu objetivo, prazo e quanto você aceita perder.
+    </section>
+
+    <section class="panel" style="margin-bottom:16px">
+      <div class="panel-head"><h2>Leitura técnica atual: criptomoedas</h2><span class="sub">histórico completo, independe do período do painel</span></div>
+      <div class="table-scroll"><table id="an-tech"></table></div>
+      <p class="sub">Tendência de <b>alta</b>: preço e média de 50 dias acima da média de 200 dias; <b>baixa</b>: ambos abaixo; senão, <b>indefinida</b>.
+        Regime de volatilidade compara a volatilidade dos últimos 30 dias com a mediana do último ano.</p>
+    </section>
+
+    <section class="grid two">
+      <div class="panel">
+        <div class="panel-head"><h2>Leitura por objetivo</h2><span class="sub">gerada a partir dos números atuais</span></div>
+        <div class="goals" id="an-goals"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Stablecoins: paridade</h2><span class="sub">quanto se afastaram de US$ 1,00</span></div>
+        <div class="table-scroll"><table id="an-peg"></table></div>
+        <p class="sub">Paridade estável mede o risco de preço, não o do emissor (reservas, regulação, resgates).</p>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <h2>Cenários de estresse: janelas de 30 dias do histórico</h2>
+        <label class="field">Valor hipotético US$ <input type="number" id="an-amount" min="1" step="100" value="1000"></label>
+      </div>
+      <div class="table-scroll"><table id="an-stress"></table></div>
+      <p class="sub">Se a pior (ou a melhor) sequência de 30 dias já registrada se repetisse a partir de hoje. O histórico disponível é de até 2 anos; quedas maiores já ocorreram antes disso.</p>
+    </section>
+
+    <section class="panel" style="margin-bottom:16px">
+      <div class="panel-head"><h2>Contexto de mercado</h2><span class="sub" id="ctx-date"></span></div>
+      <div id="ctx-warn"></div>
+      <div class="ctx" id="ctx"></div>
+    </section>
+  </div>
 
   <footer>
     Fonte: Yahoo Finance (endpoint não oficial), atualizado automaticamente via GitHub Actions.
@@ -407,6 +470,7 @@ function render() {
   renderMetrics(assets, m);
   renderSim(assets, wins);
   renderCorr(assets, wins);
+  renderAnalysis();
 }
 
 function renderPrice(assets, wins) {
@@ -505,6 +569,195 @@ function renderCorr(assets, wins) {
     }</tr>`).join("") + "</tbody>";
 }
 
+// Texto escrito manualmente: envelhece. A página avisa quando passar de CONTEXT_MAX_AGE dias.
+const CONTEXT_MAX_AGE = 14;
+const CONTEXT = {
+  date: "2026-10-21",
+  items: [
+    {
+      title: "Juros e liquidez",
+      text: "O Fed subiu os juros para 3,75%–4,00% em 16/09/2026, a primeira alta desde 2023, e decide de novo em 28/10. O Treasury de 10 anos rende cerca de 5,2% e o petróleo está acima de US$ 100. Juros altos tendem a pesar sobre ativos de risco; analistas tratam uma pausa do Fed como cenário favorável a cripto e uma nova alta como desfavorável.",
+      sources: [
+        ["Invezz / Nexo, 21/10/2026", "https://invezz.com/news/2026/10/21/nexo-sees-bitcoin-outlook-hinging-on-fed-rates-and-etf-demand-in-q4/"],
+        ["inkl, out/2026", "https://www.inkl.com/news/bitcoin-price-outlook-october-2026-will-btc-usd-hit-90-000-after-a-43-8-rally-as-fed-rate-hike-oil-above-100-and-slowing-etf-inflows-loom"],
+      ],
+    },
+    {
+      title: "Bitcoin",
+      text: "Fechou o 3º trimestre com alta de cerca de 43% e opera perto de US$ 82–84 mil. Os ETFs à vista nos EUA captaram US$ 2,65 bi em setembro, mas outubro tem fluxo instável, alternando saídas e entradas. Faixa de curto prazo citada por analistas: US$ 80–90 mil.",
+      sources: [
+        ["CryptoTicker, 21/10/2026", "https://cryptoticker.io/en/bitcoin-price-etf-inflows-fed-meeting-21-october-2026/"],
+        ["Finbold", "https://finbold.com/fed-decision-make-or-break-for-bitcoins-q4-nexo-data-suggests/"],
+      ],
+    },
+    {
+      title: "Ethereum",
+      text: "Staking em nível recorde (43,8 milhões de ETH, cerca de 36% da oferta), com rendimento caindo para ~2,6% ao ano. A atualização Glamsterdam já foi ativada na rede de testes Sepolia (06/10). Os ETFs de ether tiveram saídas líquidas em 19 e 20/10.",
+      sources: [
+        ["The Block / Bitwise, 20/10/2026", "https://www.theblock.co/news/ecosystems/2026-10-20-ethereum-solana-staking-record-yields-fall-bitwise-q3-421414"],
+        ["crypto.news", "https://crypto.news/ethereum-price-prediction-for-november-can-eth-recover-2800"],
+      ],
+    },
+    {
+      title: "Solana",
+      text: "Cerca de 69% da oferta está em staking. A atualização Alpenglow, que reduz o tempo de finalização das transações de ~12,8 s para ~150 ms, foi agendada para a rede principal em 21/10/2026. Os ETFs de SOL encerraram em outubro uma sequência de 14 semanas de entradas.",
+      sources: [
+        ["Benzinga, out/2026", "https://www.benzinga.com/crypto/26/10/62152677/solana-price-ripe-for-more-gains-as-etf-staking-inflows-jump-ahead-of-alpenglow-upgrade"],
+        ["The Block / Bitwise", "https://www.theblock.co/news/ecosystems/2026-10-20-ethereum-solana-staking-record-yields-fall-bitwise-q3-421414"],
+      ],
+    },
+    {
+      title: "Stablecoins e regulação",
+      text: "Nos EUA, o GENIUS Act está em regulamentação, com regras entrando em vigor a partir de janeiro de 2027. O USDT, emitido fora dos EUA, ainda não está em conformidade e tem prazo até julho de 2028; a Tether lançou o USAT (jan/2026) como versão regulada no país. O USD1, da World Liberty Financial (empresa ligada à família Trump), perdeu cerca de US$ 400 milhões de capitalização entre 6 e 19/10 com resgates, mas manteve a paridade entre US$ 0,998 e 1,000; as reservas declaradas são de ~US$ 4 bi em caixa e títulos curtos do Tesouro.",
+      sources: [
+        ["CoinDesk, 17/07/2026", "https://www.coindesk.com/news-analysis/2026/07/17/tether-s-usdt-hits-2-year-countdown-threatening-its-position-on-u-s-crypto-platforms"],
+        ["CoinDesk, 27/01/2026", "https://www.coindesk.com/business/2026/01/27/tether-debuts-federally-regulated-usat-stablecoin-via-anchorage-digital"],
+        ["Cointelegraph, out/2026", "https://cointelegraph.com/news/world-liberty-usd1-stablecoin-market-cap-drops-400-million"],
+      ],
+    },
+  ],
+};
+
+const sma = (c, n) => c.length >= n ? mean(c.slice(-n)) : NaN;
+const median = (a) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+function lastDays(asset, days) {
+  const cutoff = isoMinusDays(asset.dates[asset.dates.length - 1], days);
+  const i0 = Math.max(0, asset.dates.findIndex((d) => d >= cutoff));
+  return { dates: asset.dates.slice(i0), close: asset.close.slice(i0), volume: asset.volume.slice(i0) };
+}
+
+function analyze(asset) {
+  const c = asset.close, n = c.length, last = c[n - 1];
+  const ma50 = sma(c, 50), ma200 = sma(c, 200);
+  let trend = "indefinida";
+  if (Number.isFinite(ma200)) {
+    if (last > ma200 && ma50 > ma200) trend = "alta";
+    else if (last < ma200 && ma50 < ma200) trend = "baixa";
+  }
+  const year = lastDays(asset, 365);
+  const m = metrics(asset, year);
+  const rv = rollingVol(year).filter((x) => x !== null);
+  const volNow = rv[rv.length - 1];
+  const r30 = [];
+  for (let i = 30; i < n; i++) r30.push({ r: c[i] / c[i - 30] - 1, end: asset.dates[i] });
+  const worst = r30.reduce((a, b) => (b.r < a.r ? b : a), r30[0] || { r: NaN });
+  const best = r30.reduce((a, b) => (b.r > a.r ? b : a), r30[0] || { r: NaN });
+  const q90 = lastDays(asset, 90).close;
+  return {
+    last, ma50, ma200, trend,
+    vsMa200: last / ma200 - 1,
+    mom30: changeOver(asset, 30), mom90: changeOver(asset, 90), mom365: changeOver(asset, 365),
+    volNow, volRatio: volNow / median(rv),
+    fromHigh: last / Math.max(...c) - 1,
+    sharpe: m?.sharpe, mdd: m?.mdd, vol1y: m?.vol,
+    worst30: worst, best30: best,
+    pegNow: last - 1,
+    pegMax90: Math.max(...q90.map((x) => Math.abs(x - 1))),
+    daysOff: year.close.filter((x) => Math.abs(x - 1) > 0.005).length,
+    minPrice: Math.min(...c),
+  };
+}
+
+function trendTag(t) {
+  const cls = t === "alta" ? "pos" : t === "baixa" ? "neg" : "";
+  return `<span class="tag ${cls}">${t}</span>`;
+}
+
+function volRegime(r) {
+  if (!Number.isFinite(r)) return "";
+  if (r > 1.25) return ` <span class="neg">(acima do normal)</span>`;
+  if (r < 0.8) return ` <span class="sub">(abaixo do normal)</span>`;
+  return ` <span class="sub">(normal)</span>`;
+}
+
+function avgCorrelation(assets) {
+  const maps = assets.map((a) => { const y = lastDays(a, 365); return new Map(returns(y.close).map((r, i) => [y.dates[i + 1], r])); });
+  const rs = [];
+  for (let i = 0; i < maps.length; i++) for (let j = i + 1; j < maps.length; j++) {
+    const common = [...maps[i].keys()].filter((d) => maps[j].has(d));
+    if (common.length > 10) rs.push(pearson(common.map((d) => maps[i].get(d)), common.map((d) => maps[j].get(d))));
+  }
+  return rs.length ? mean(rs) : NaN;
+}
+
+function renderAnalysis() {
+  const assets = validAssets();
+  const an = new Map(assets.map((a) => [a.key, analyze(a)]));
+  const cryptos = assets.filter((a) => a.type !== "stablecoin");
+  const stables = assets.filter((a) => a.type === "stablecoin");
+  const name = (a) => `<span class="dot" style="--c:${a.color}"></span>${esc(a.name)}`;
+
+  $("#an-tech").innerHTML =
+    "<thead><tr><th>Ativo</th><th>Preço</th><th>Tendência</th><th>vs. MM200</th><th>30d</th><th>90d</th><th>1 ano</th><th>Vol. 30d (a.a.)</th><th>Do topo (2a)</th><th>Sharpe 1a</th><th>Queda máx. 1a</th></tr></thead><tbody>" +
+    cryptos.map((a) => { const x = an.get(a.key); return `<tr><td>${name(a)}</td><td class="num">${usd(x.last)}</td><td>${trendTag(x.trend)}</td>
+      <td class="num">${signPct(x.vsMa200, 1)}</td><td class="num">${signPct(x.mom30, 1)}</td><td class="num">${signPct(x.mom90, 1)}</td><td class="num">${signPct(x.mom365, 1)}</td>
+      <td class="num">${pct(x.volNow, 0)}${volRegime(x.volRatio)}</td><td class="num">${signPct(x.fromHigh, 1)}</td><td class="num">${num(x.sharpe)}</td><td class="num">${signPct(x.mdd, 1)}</td></tr>`; }).join("") +
+    "</tbody>";
+
+  $("#an-peg").innerHTML =
+    "<thead><tr><th>Ativo</th><th>Preço</th><th>Desvio agora</th><th>Desvio máx. 90d</th><th>Dias fora ±0,5% (1a)</th><th>Mínima (2a)</th></tr></thead><tbody>" +
+    stables.map((a) => { const x = an.get(a.key); return `<tr><td>${name(a)}</td><td class="num">${usd(x.last)}</td><td class="num">${signPct(x.pegNow, 2)}</td>
+      <td class="num">${pct(x.pegMax90, 2)}</td><td class="num">${x.daysOff}</td><td class="num">${usd(x.minPrice)}</td></tr>`; }).join("") +
+    "</tbody>";
+
+  const by = (list, f, dir = 1) => list.filter((a) => Number.isFinite(f(an.get(a.key)))).sort((a, b) => dir * (f(an.get(b.key)) - f(an.get(a.key))))[0];
+  const goals = [];
+  if (stables.length) {
+    const steadiest = by(stables, (x) => x.pegMax90, -1);
+    goals.push(["Preservar valor em dólar",
+      `As stablecoins são as únicas da lista feitas para não oscilar. Nos últimos 90 dias, ${stables.map((a) => `${esc(a.key)} se afastou no máximo ${pct(an.get(a.key).pegMax90, 2)}`).join(" e ")} de US$ 1,00` +
+      (steadiest && stables.length > 1 ? `; ${esc(steadiest.key)} foi a mais estável.` : ".") +
+      " Elas não rendem nada sozinhas; o risco é do emissor (reservas, resgates, regulação), não de preço."]);
+  }
+  if (cryptos.length) {
+    const bestSharpe = by(cryptos, (x) => x.sharpe);
+    const shallow = by(cryptos, (x) => x.mdd);
+    const wild = by(cryptos, (x) => x.vol1y);
+    const up = cryptos.filter((a) => an.get(a.key).trend === "alta").map((a) => a.key);
+    const down = cryptos.filter((a) => an.get(a.key).trend === "baixa").map((a) => a.key);
+    goals.push(["Crescimento aceitando oscilação",
+      `No último ano, ${esc(bestSharpe.name)} teve o melhor retorno por unidade de risco (Sharpe ${num(an.get(bestSharpe.key).sharpe)})` +
+      (shallow === bestSharpe ? ` e também a menor queda máxima (${pct(an.get(shallow.key).mdd, 1)}).`
+        : shallow ? ` e ${esc(shallow.name)} a menor queda máxima (${pct(an.get(shallow.key).mdd, 1)}).` : ".") +
+      ` Tendência hoje: ${up.length ? `alta em ${up.join(", ")}` : "nenhuma em alta"}${down.length ? `; baixa em ${down.join(", ")}` : ""}.`]);
+    goals.push(["Maior risco, maior amplitude",
+      `${esc(wild.name)} é o mais volátil (${pct(an.get(wild.key).vol1y, 0)} ao ano). Na pior janela de 30 dias do histórico caiu ${pct(-an.get(wild.key).worst30.r, 1)}; na melhor, subiu ${pct(an.get(wild.key).best30.r, 1)}.`]);
+    if (cryptos.length > 1) {
+      const r = avgCorrelation(cryptos);
+      goals.push(["Diversificação",
+        `${cryptos.map((a) => a.key).join(", ")} têm correlação média de ${num(r)} nos retornos diários do último ano` +
+        (r > 0.6 ? ": tendem a subir e cair juntas, então combiná-las diversifica pouco contra uma queda geral do mercado." : ".")]);
+    }
+  }
+  $("#an-goals").innerHTML = goals.map(([t, p]) => `<div><h3>${t}</h3><p>${p}</p></div>`).join("") +
+    `<p class="sub">Retrato do passado recente. Não é previsão nem recomendação de compra.</p>`;
+
+  const amount = state.amount;
+  $("#an-stress").innerHTML =
+    "<thead><tr><th>Ativo</th><th>Pior 30 dias</th><th>Terminou em</th><th>US$ " + num(amount, 0) + " viraria</th><th>Melhor 30 dias</th><th>Terminou em</th><th>US$ " + num(amount, 0) + " viraria</th></tr></thead><tbody>" +
+    assets.map((a) => { const x = an.get(a.key); return `<tr><td>${name(a)}</td>
+      <td class="num">${signPct(x.worst30.r, 1)}</td><td class="num">${x.worst30.end ? fmtDate(x.worst30.end) : "—"}</td><td class="num">${usd(amount * (1 + x.worst30.r), 2)}</td>
+      <td class="num">${signPct(x.best30.r, 1)}</td><td class="num">${x.best30.end ? fmtDate(x.best30.end) : "—"}</td><td class="num">${usd(amount * (1 + x.best30.r), 2)}</td></tr>`; }).join("") +
+    "</tbody>";
+
+  const age = Math.floor((Date.now() - Date.parse(CONTEXT.date)) / DAY);
+  $("#ctx-date").textContent = `escrito em ${fmtDate(CONTEXT.date)}`;
+  $("#ctx-warn").innerHTML = age > CONTEXT_MAX_AGE
+    ? `<div class="warn">Este contexto tem ${age} dias e provavelmente está desatualizado. Os números das tabelas acima continuam atuais.</div>` : "";
+  $("#ctx").innerHTML = CONTEXT.items.map((it) => `<div><h3>${esc(it.title)}</h3><p>${esc(it.text)}</p>
+    <div class="src">Fontes: ${it.sources.map(([label, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>`).join(" · ")}</div></div>`).join("");
+}
+
+function showTab(tab) {
+  if (tab !== "analise") tab = "painel";
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  $("#tab-painel").hidden = tab !== "painel";
+  $("#tab-analise").hidden = tab !== "analise";
+  $("#periods").style.visibility = tab === "painel" ? "visible" : "hidden";
+  if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
+}
+
 function initControls() {
   $("#periods").innerHTML = Object.keys(PERIODS).map((p) => `<button data-p="${p}" aria-pressed="${p === state.period}">${p}</button>`).join("");
   $("#periods").addEventListener("click", (e) => {
@@ -527,7 +780,17 @@ function initControls() {
     document.querySelectorAll("#mode button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
     render();
   });
-  $("#amount").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (v > 0) { state.amount = v; render(); } });
+  const onAmount = (e) => {
+    const v = parseFloat(e.target.value);
+    if (!(v > 0)) return;
+    state.amount = v;
+    $("#amount").value = $("#an-amount").value = e.target.value;
+    render();
+  };
+  $("#amount").addEventListener("input", onAmount);
+  $("#an-amount").addEventListener("input", onAmount);
+  $(".tabs").addEventListener("click", (e) => { const t = e.target.closest("button")?.dataset.tab; if (t) showTab(t); });
+  addEventListener("hashchange", () => showTab(location.hash.slice(1)));
   $("#rf").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) { state.rf = v; render(); } });
 
   $("#theme").addEventListener("click", () => {
@@ -561,6 +824,7 @@ async function main() {
   const when = new Date(DATA.generated_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
   $("#updated").textContent = `Atualizado em ${when} · ${DATA.source} · cotações em USD`;
   initControls();
+  showTab(location.hash.slice(1));
   renderCards();
   render();
 }
