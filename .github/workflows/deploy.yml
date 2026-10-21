@@ -2,7 +2,7 @@ name: Atualizar dados e publicar no GitHub Pages
 
 on:
   push:
-    branches: [main]
+  pull_request:
   schedule:
     - cron: "17 * * * *" # a cada hora
   workflow_dispatch:
@@ -36,12 +36,16 @@ jobs:
           cp data/crypto.json _site/data/
 
       - uses: actions/configure-pages@v5
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           path: _site
 
   deploy:
+    # Em outras branches e PRs só o build roda, para validar a coleta de dados.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
